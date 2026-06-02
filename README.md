@@ -157,8 +157,16 @@ vercel deploy --prod
 - [x] Phase 5 — Razorpay Payments
 - [x] Phase 6 — Admin Dashboard
 - [x] Phase 7 — Docker + Vercel + Render Deployment
-- [ ] Phase 8 — AI Recommendations, Semantic Search, Seller Marketplace
+
 
 ---
 
-Built with ❤️ as a production-grade engineering project.
+## 👨‍💻 Author
+
+**Akash Kumar Saw**
+
+AI & Machine Learning Enthusiast | Software Engineer
+
+[![LinkedIn]](https://www.linkedin.com/in/akash-kumar-saw-bb1630258/)
+
+Feel free to connect with me on LinkedIn and explore my other projects.
