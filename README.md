@@ -1,6 +1,3 @@
-# SKYKART 🛒
-
-> A production-grade full-stack ecommerce platform built with Next.js 14, FastAPI, and PostgreSQL.
 <div align="center">
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=6C63FF&height=200&section=header&text=SKYKART&fontSize=80&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=Shop%20the%20Future%2C%20Delivered%20Today&descAlignY=60&descAlign=50" width="100%"/>
