@@ -1,35 +1,235 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.venv/
-venv/
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
 
-# Environment
+# ─── SECRETS (MOST IMPORTANT — NEVER COMMIT) ────────────────
 .env
 .env.local
 .env.production
+.env.staging
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Node
+# Keep example/template files — safe to push (no real secrets)
+!.env.example
+!.env.local.example
+
+
+# ─── PYTHON / BACKEND ───────────────────────────────────────
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+*.whl
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+test-results/
+
+# SQLite test database (created by pytest conftest)
+test.db
+*.sqlite3
+*.db
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+.pytype/
+.pyre/
+
+# Linters
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+
+# ─── NODE / FRONTEND ────────────────────────────────────────
+
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
 .next/
 out/
-dist/
-*.log
 
-# IDEs
+# TypeScript build cache
+*.tsbuildinfo
+next-env.d.ts
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Storybook
+storybook-static/
+
+# PWA
+public/sw.js
+public/workbox-*.js
+public/worker-*.js
+
+
+# ─── DOCKER ─────────────────────────────────────────────────
+
+# Local Docker override files
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Docker volume data
+postgres_data/
+redis_data/
+
+
+# ─── EDITORS & IDEs ─────────────────────────────────────────
+
+# VS Code (keep shared settings examples)
 .vscode/
+!.vscode/extensions.json
+
+# JetBrains
 .idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim / Neovim
 *.swp
+*.swo
+*~
 
-# OS
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+
+# ─── OPERATING SYSTEM ───────────────────────────────────────
+
+# macOS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon
+
+# Windows
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
 
-# Build
+# Linux
+*~
+
+
+# ─── LOGS ───────────────────────────────────────────────────
+
+logs/
+*.log
+*.log.*
+log/
+
+
+# ─── TEMPORARY FILES ────────────────────────────────────────
+
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+
+# ─── ARCHIVES (never commit built zips to git) ──────────────
+
 *.zip
+*.tar.gz
+*.rar
+*.7z
 
 
+# ─── CERTIFICATES (never commit SSL/TLS certs) ──────────────
+
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+
+# ─── CLOUD / DEPLOYMENT ─────────────────────────────────────
+
+# Vercel
+.vercel/
+
+# Terraform (for future infra-as-code)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# AWS credentials
+.aws/
+
+
+# ─── TESTING ARTIFACTS ──────────────────────────────────────
+
+# Playwright
+playwright-report/
+playwright/.cache/
+
+# Cypress
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+
+
+# ─── PROJECT-SPECIFIC ───────────────────────────────────────
+
+# Local dev seed overrides
+backend/app/database/seed_local.py
+
+# Profiling outputs
+*.prof
+*.lprof
+
+# Generated API client files
+frontend/src/generated/
