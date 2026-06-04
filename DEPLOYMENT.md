@@ -6,7 +6,7 @@
 git init
 git add .
 git commit -m "feat: initial SKYKART project"
-git remote add origin https://github.com/YOUR_USERNAME/skykart.git
+git remote add origin https://github.com/aako-aakash/skykart.git
 git push -u origin main
 ```
 

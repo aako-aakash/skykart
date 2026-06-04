@@ -523,6 +523,17 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 
+## 👨‍💻 Author
+
+**Akash Kumar Saw**
+
+AI & Machine Learning Enthusiast | Software Engineer
+
+[![LinkedIn]](https://www.linkedin.com/in/akash-kumar-saw-bb1630258/)
+
+Feel free to connect with me on LinkedIn and explore my other projects.
+
+
 <div align="center">
 
 Built with ❤️ as a production-grade engineering project.
@@ -534,12 +545,3 @@ Built with ❤️ as a production-grade engineering project.
 </div>
 
 
-## 👨‍💻 Author
-
-**Akash Kumar Saw**
-
-AI & Machine Learning Enthusiast | Software Engineer
-
-[![LinkedIn]](https://www.linkedin.com/in/akash-kumar-saw-bb1630258/)
-
-Feel free to connect with me on LinkedIn and explore my other projects.
