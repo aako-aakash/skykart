@@ -2,7 +2,7 @@ services:
   - type: web
     name: skykart-backend
     runtime: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && alembic upgrade head
+    buildCommand: pip install --upgrade pip && pip install --prefer-binary -r requirements.txt && alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
