@@ -1,14 +1,13 @@
-"""Initial schema — all SKYKART tables
+"""Initial schema
 
 Revision ID: 001
 Revises:
-Create Date: 2024-01-01 00:00:00
+Create Date: 2024-01-01
 """
-
-from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from typing import Sequence, Union
 
 revision: str = "001"
 down_revision: Union[str, None] = None
@@ -19,244 +18,215 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # ── ENUMS — create only if they do not already exist ─────────────────────
+    # Create all enums safely using raw SQL — never fails if already exists
     conn.execute(sa.text("""
         DO $$ BEGIN
-            CREATE TYPE userrole AS ENUM ('user', 'admin');
-        EXCEPTION WHEN duplicate_object THEN null;
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
+                CREATE TYPE userrole AS ENUM ('user', 'admin');
+            END IF;
         END $$;
     """))
 
     conn.execute(sa.text("""
         DO $$ BEGIN
-            CREATE TYPE orderstatus AS ENUM (
-                'pending', 'confirmed', 'processing', 'shipped',
-                'delivered', 'cancelled', 'refunded'
-            );
-        EXCEPTION WHEN duplicate_object THEN null;
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'orderstatus') THEN
+                CREATE TYPE orderstatus AS ENUM (
+                    'pending', 'confirmed', 'processing',
+                    'shipped', 'delivered', 'cancelled', 'refunded'
+                );
+            END IF;
         END $$;
     """))
 
     conn.execute(sa.text("""
         DO $$ BEGIN
-            CREATE TYPE paymentstatus AS ENUM ('pending', 'success', 'failed', 'refunded');
-        EXCEPTION WHEN duplicate_object THEN null;
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'paymentstatus') THEN
+                CREATE TYPE paymentstatus AS ENUM ('pending', 'success', 'failed', 'refunded');
+            END IF;
         END $$;
     """))
 
     conn.execute(sa.text("""
         DO $$ BEGIN
-            CREATE TYPE paymentmethod AS ENUM ('razorpay', 'stripe', 'wallet', 'cod');
-        EXCEPTION WHEN duplicate_object THEN null;
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'paymentmethod') THEN
+                CREATE TYPE paymentmethod AS ENUM ('razorpay', 'stripe', 'wallet', 'cod');
+            END IF;
         END $$;
     """))
 
-    # ── users ─────────────────────────────────────────────────────────────────
-    op.create_table(
-        "users",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("email", sa.String(255), nullable=False),
-        sa.Column("full_name", sa.String(255), nullable=False),
-        sa.Column("phone", sa.String(20), nullable=True),
-        sa.Column("password_hash", sa.String(255), nullable=False),
-        sa.Column("role", sa.Enum("user", "admin", name="userrole", create_type=False), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("is_verified", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_users_email", "users", ["email"], unique=True, if_not_exists=True)
+    # Create all tables using pure SQL — fully idempotent
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            email VARCHAR(255) NOT NULL UNIQUE,
+            full_name VARCHAR(255) NOT NULL,
+            phone VARCHAR(20),
+            password_hash VARCHAR(255) NOT NULL,
+            role userrole NOT NULL DEFAULT 'user',
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            is_verified BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);"))
 
-    # ── categories ────────────────────────────────────────────────────────────
-    op.create_table(
-        "categories",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("name", sa.String(100), nullable=False),
-        sa.Column("slug", sa.String(120), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("image_url", sa.String(500), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("parent_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["parent_id"], ["categories.id"], ondelete="SET NULL"),
-        sa.PrimaryKeyConstraint("id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_categories_slug", "categories", ["slug"], unique=True, if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name VARCHAR(100) NOT NULL,
+            slug VARCHAR(120) NOT NULL UNIQUE,
+            description TEXT,
+            image_url VARCHAR(500),
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            parent_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_categories_slug ON categories(slug);"))
 
-    # ── products ──────────────────────────────────────────────────────────────
-    op.create_table(
-        "products",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("slug", sa.String(300), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("short_description", sa.String(500), nullable=True),
-        sa.Column("price", sa.Numeric(10, 2), nullable=False),
-        sa.Column("compare_price", sa.Numeric(10, 2), nullable=True),
-        sa.Column("stock_quantity", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("sku", sa.String(100), nullable=True),
-        sa.Column("image_urls", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"),
-        sa.Column("thumbnail_url", sa.String(500), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("is_featured", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("avg_rating", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("review_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("tags", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"),
-        sa.Column("category_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["category_id"], ["categories.id"], ondelete="SET NULL"),
-        sa.PrimaryKeyConstraint("id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_products_slug", "products", ["slug"], unique=True, if_not_exists=True)
-    op.create_index("ix_products_name", "products", ["name"], if_not_exists=True)
-    op.create_index("ix_products_category_id", "products", ["category_id"], if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS products (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(300) NOT NULL UNIQUE,
+            description TEXT,
+            short_description VARCHAR(500),
+            price NUMERIC(10,2) NOT NULL,
+            compare_price NUMERIC(10,2),
+            stock_quantity INTEGER NOT NULL DEFAULT 0,
+            sku VARCHAR(100) UNIQUE,
+            image_urls TEXT[] NOT NULL DEFAULT '{}',
+            thumbnail_url VARCHAR(500),
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            is_featured BOOLEAN NOT NULL DEFAULT false,
+            avg_rating FLOAT NOT NULL DEFAULT 0,
+            review_count INTEGER NOT NULL DEFAULT 0,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_products_slug ON products(slug);"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_products_name ON products(name);"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_products_category_id ON products(category_id);"))
 
-    # ── addresses ─────────────────────────────────────────────────────────────
-    op.create_table(
-        "addresses",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("full_name", sa.String(255), nullable=False),
-        sa.Column("phone", sa.String(20), nullable=False),
-        sa.Column("line1", sa.String(255), nullable=False),
-        sa.Column("line2", sa.String(255), nullable=True),
-        sa.Column("city", sa.String(100), nullable=False),
-        sa.Column("state", sa.String(100), nullable=False),
-        sa.Column("pincode", sa.String(10), nullable=False),
-        sa.Column("country", sa.String(100), nullable=False, server_default="India"),
-        sa.Column("is_default", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_addresses_user_id", "addresses", ["user_id"], if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS addresses (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            full_name VARCHAR(255) NOT NULL,
+            phone VARCHAR(20) NOT NULL,
+            line1 VARCHAR(255) NOT NULL,
+            line2 VARCHAR(255),
+            city VARCHAR(100) NOT NULL,
+            state VARCHAR(100) NOT NULL,
+            pincode VARCHAR(10) NOT NULL,
+            country VARCHAR(100) NOT NULL DEFAULT 'India',
+            is_default BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_addresses_user_id ON addresses(user_id);"))
 
-    # ── cart_items ────────────────────────────────────────────────────────────
-    op.create_table(
-        "cart_items",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("product_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("quantity", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id", "product_id", name="uq_cart_user_product"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_cart_items_user_id", "cart_items", ["user_id"], if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS cart_items (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            CONSTRAINT uq_cart_user_product UNIQUE (user_id, product_id)
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_cart_items_user_id ON cart_items(user_id);"))
 
-    # ── orders ────────────────────────────────────────────────────────────────
-    op.create_table(
-        "orders",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("address_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("status", sa.Enum(
-            "pending", "confirmed", "processing", "shipped",
-            "delivered", "cancelled", "refunded",
-            name="orderstatus", create_type=False
-        ), nullable=False),
-        sa.Column("subtotal", sa.Numeric(10, 2), nullable=False),
-        sa.Column("discount_amount", sa.Numeric(10, 2), nullable=False, server_default="0"),
-        sa.Column("shipping_charge", sa.Numeric(10, 2), nullable=False, server_default="0"),
-        sa.Column("total_amount", sa.Numeric(10, 2), nullable=False),
-        sa.Column("coupon_code", sa.String(50), nullable=True),
-        sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["address_id"], ["addresses.id"], ondelete="RESTRICT"),
-        sa.PrimaryKeyConstraint("id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_orders_user_id", "orders", ["user_id"], if_not_exists=True)
-    op.create_index("ix_orders_status", "orders", ["status"], if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+            address_id UUID NOT NULL REFERENCES addresses(id) ON DELETE RESTRICT,
+            status orderstatus NOT NULL DEFAULT 'pending',
+            subtotal NUMERIC(10,2) NOT NULL,
+            discount_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+            shipping_charge NUMERIC(10,2) NOT NULL DEFAULT 0,
+            total_amount NUMERIC(10,2) NOT NULL,
+            coupon_code VARCHAR(50),
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_orders_user_id ON orders(user_id);"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_orders_status ON orders(status);"))
 
-    # ── order_items ───────────────────────────────────────────────────────────
-    op.create_table(
-        "order_items",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("order_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("product_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("product_name", sa.String(255), nullable=False),
-        sa.Column("product_image", sa.String(500), nullable=True),
-        sa.Column("quantity", sa.Integer(), nullable=False),
-        sa.Column("unit_price", sa.Numeric(10, 2), nullable=False),
-        sa.Column("subtotal", sa.Numeric(10, 2), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["order_id"], ["orders.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
-        sa.PrimaryKeyConstraint("id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_order_items_order_id", "order_items", ["order_id"], if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS order_items (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+            product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+            product_name VARCHAR(255) NOT NULL,
+            product_image VARCHAR(500),
+            quantity INTEGER NOT NULL,
+            unit_price NUMERIC(10,2) NOT NULL,
+            subtotal NUMERIC(10,2) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_order_items_order_id ON order_items(order_id);"))
 
-    # ── payments ──────────────────────────────────────────────────────────────
-    op.create_table(
-        "payments",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("order_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("amount", sa.Numeric(10, 2), nullable=False),
-        sa.Column("currency", sa.String(10), nullable=False, server_default="INR"),
-        sa.Column("method", sa.Enum("razorpay", "stripe", "wallet", "cod", name="paymentmethod", create_type=False), nullable=False),
-        sa.Column("status", sa.Enum("pending", "success", "failed", "refunded", name="paymentstatus", create_type=False), nullable=False),
-        sa.Column("gateway_order_id", sa.String(100), nullable=True),
-        sa.Column("gateway_payment_id", sa.String(100), nullable=True),
-        sa.Column("gateway_signature", sa.String(500), nullable=True),
-        sa.Column("paid_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("failure_reason", sa.String(500), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["order_id"], ["orders.id"], ondelete="RESTRICT"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("order_id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_payments_order_id", "payments", ["order_id"], if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            order_id UUID NOT NULL UNIQUE REFERENCES orders(id) ON DELETE RESTRICT,
+            amount NUMERIC(10,2) NOT NULL,
+            currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+            method paymentmethod NOT NULL DEFAULT 'razorpay',
+            status paymentstatus NOT NULL DEFAULT 'pending',
+            gateway_order_id VARCHAR(100),
+            gateway_payment_id VARCHAR(100),
+            gateway_signature VARCHAR(500),
+            paid_at TIMESTAMPTZ,
+            failure_reason VARCHAR(500),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_payments_order_id ON payments(order_id);"))
 
-    # ── reviews ───────────────────────────────────────────────────────────────
-    op.create_table(
-        "reviews",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("product_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("rating", sa.Integer(), nullable=False),
-        sa.Column("title", sa.String(200), nullable=True),
-        sa.Column("comment", sa.Text(), nullable=True),
-        sa.Column("is_verified_purchase", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        if_not_exists=True,
-    )
-    op.create_index("ix_reviews_product_id", "reviews", ["product_id"], if_not_exists=True)
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS reviews (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            rating INTEGER NOT NULL,
+            title VARCHAR(200),
+            comment TEXT,
+            is_verified_purchase BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_reviews_product_id ON reviews(product_id);"))
 
 
 def downgrade() -> None:
-    op.drop_table("reviews")
-    op.drop_table("payments")
-    op.drop_table("order_items")
-    op.drop_table("orders")
-    op.drop_table("cart_items")
-    op.drop_table("addresses")
-    op.drop_table("products")
-    op.drop_table("categories")
-    op.drop_table("users")
-    op.execute("DROP TYPE IF EXISTS paymentmethod")
-    op.execute("DROP TYPE IF EXISTS paymentstatus")
-    op.execute("DROP TYPE IF EXISTS orderstatus")
-    op.execute("DROP TYPE IF EXISTS userrole")
+    conn = op.get_bind()
+    conn.execute(sa.text("DROP TABLE IF EXISTS reviews CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS payments CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS order_items CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS orders CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS cart_items CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS addresses CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS products CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS categories CASCADE;"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS users CASCADE;"))
+    conn.execute(sa.text("DROP TYPE IF EXISTS paymentmethod;"))
+    conn.execute(sa.text("DROP TYPE IF EXISTS paymentstatus;"))
+    conn.execute(sa.text("DROP TYPE IF EXISTS orderstatus;"))
+    conn.execute(sa.text("DROP TYPE IF EXISTS userrole;"))
